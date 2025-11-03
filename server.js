@@ -20,7 +20,7 @@ app.use(express.urlencoded({ extended: true }));
 
 
 app.use(cors({
-    origin: 'http://localhost:5173', // Your React app URL
+    origin: 'https://portfolio-omega-vert-ehkt9x89mo.vercel.app/', // Your React app URL
     credentials: true
   }));
 // Request logger (optional but helpful)
