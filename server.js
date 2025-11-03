@@ -18,11 +18,34 @@ const PORT = process.env.PORT || 5000;
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
+const allowedOrigins = [
+  'http://localhost:5173',                         // local dev
+  'https://portfolio-omega-vert-ehkt9x89mo.vercel.app', // Vercel prod
+];
+
 
 app.use(cors({
     origin: 'https://portfolio-omega-vert-ehkt9x89mo.vercel.app/', // Your React app URL
     credentials: true
   }));
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      // Allow server-to-server / Postman / curl where origin might be undefined
+      if (!origin) return callback(null, true);
+
+      if (allowedOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+
+      console.warn('❌ CORS blocked for origin:', origin);
+      return callback(new Error('Not allowed by CORS'));
+    },
+    credentials: true,
+  })
+);
+
 // Request logger (optional but helpful)
 app.use((req, res, next) => {
   console.log(`📨 ${req.method} ${req.path} - ${new Date().toLocaleTimeString()}`);
