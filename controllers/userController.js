@@ -74,15 +74,17 @@ const sendNote = async (req, res) => {
 // ============================================
 // GET NOTES (Search with AI)
 // ============================================
+// ============================================
+// GET NOTES (Search with AI)
+// ============================================
 const getNotes = async (req, res) => {
   try {
     const { query } = req.query;
-    
-    // ✅ FIX 6: Added return statement
+
     if (!query || query.trim() === "") {
-      return res.status(400).json({ 
+      return res.status(400).json({
         success: false,
-        message: "Query parameter is required" 
+        message: "Query parameter is required"
       });
     }
 
@@ -102,27 +104,28 @@ const getNotes = async (req, res) => {
     const matches = searchResponse.matches || [];
     console.log(`📊 Found ${matches.length} matches`);
 
+    // 🔹 No results: short, kind, professional reply
     if (matches.length === 0) {
-      // ✅ FIX 7: Let AI handle "no results" case
       const completion = await groq.chat.completions.create({
         model: "llama-3.1-8b-instant",
         messages: [
           {
             role: "system",
-            content: `You are a helpful and friendly personal assistant...`
+            content: `You are a concise, warm, and professional personal assistant for Hemachandra.
+
+Your job:
+- Let the user know that no saved notes matched their question.
+- Sound empathetic and encouraging.
+- Reply in one or two short sentences.
+- Invite them to rephrase or ask something else.`
           },
           {
             role: "user",
-            content: `The user asked: "${query}"
-      
-      Here is the most relevant note from their database:
-      ${formattedResults}
-      
-      Please provide a helpful, conversational answer that addresses their query using the information from this note.`
+            content: `The user asked: "${query}". No matching notes were found. Write a brief, kind reply.`
           }
         ],
-        temperature: 0.7,
-        max_tokens: 500,
+        temperature: 0.5,
+        max_tokens: 80,
       });
 
       const aiAnswer = completion.choices[0].message.content.trim();
@@ -133,29 +136,34 @@ const getNotes = async (req, res) => {
       });
     }
 
-    // ✅ FIX 8: Format results with better structure
-    const formattedResults = matches.map((m, i) => 
-      `${i + 1}. Title: "${m.metadata?.title}"\n   Description: "${m.metadata?.description}"\n   Relevance: ${(m.score * 100).toFixed(1)}%`
-    ).join("\n\n");
+    // 🔹 We have matches: format them nicely
+    const formattedResults = matches
+      .map(
+        (m, i) =>
+          `${i + 1}. Title: "${m.metadata?.title}"\n   Description: "${m.metadata?.description}"\n   Relevance: ${(m.score * 100).toFixed(1)}%`
+      )
+      .join("\n\n");
 
     console.log("📝 Formatted results:\n", formattedResults);
 
-    // 3️⃣ Ask Groq model to generate natural response
+    // 3️⃣ Ask Groq model to generate a short, professional, empathetic response
     const completion = await groq.chat.completions.create({
       model: "llama-3.1-8b-instant",
       messages: [
         {
-            role: "system",
-            content: `You are a concise, friendly personal assistant speaking as Hemachandra in first person.
-          
-          Your job:
-          - Answer the user's question using the note(s) I give you.
-          - Keep it short and focused: 2–4 sentences, max ~90 words.
-          - Start directly with the answer, don't restate the question.
-          - Use simple, clear language.
-          - If the note doesn't fully answer the question, briefly say that and give one helpful suggestion.`
-          }
-          ,
+          role: "system",
+          content: `You are Hemachandra's personal AI assistant.
+
+Tone:
+- Calm, friendly, and professional.
+- Short and clear: 2–4 sentences, max about 80 words.
+- Write in first person as Hemachandra ("I", "my").
+
+Task:
+- Use the notes I provide as context to answer the user's question.
+- Combine information from multiple notes when helpful.
+- If the notes don't fully cover the question, say that briefly and suggest one simple next step or clarification.`
+        },
         {
           role: "user",
           content: `The user asked: "${query}"
@@ -163,30 +171,30 @@ const getNotes = async (req, res) => {
 Here are the relevant notes from their database:
 ${formattedResults}
 
-Please provide a helpful, conversational answer that addresses their query using the information from these notes.`
+Using only this information and reasonable inferences, write a short, natural, and professional answer for the user in first person.`
         }
       ],
-      temperature: 0.7,
-      max_tokens: 500,
+      temperature: 0.6,
+      max_tokens: 120,
     });
 
     const aiAnswer = completion.choices[0].message.content.trim();
     console.log("🤖 AI Response generated");
 
     // 4️⃣ Send back AI answer as plain text
-    // ✅ FIX 9: Set proper content type for text response
-    res.setHeader('Content-Type', 'text/plain');
+    res.setHeader("Content-Type", "text/plain");
     res.send(aiAnswer);
 
   } catch (err) {
     console.error("❌ Error searching notes:", err);
-    res.status(500).json({ 
+    res.status(500).json({
       success: false,
       message: "Error searching notes",
-      error: process.env.NODE_ENV === 'development' ? err.message : undefined
+      error: process.env.NODE_ENV === "development" ? err.message : undefined
     });
   }
 };
+
 
 // ============================================
 // ADDITIONAL HELPER: Get All Notes (Optional)
