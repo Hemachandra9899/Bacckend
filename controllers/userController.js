@@ -95,7 +95,7 @@ const getNotes = async (req, res) => {
     // 2️⃣ Search in Pinecone
     const searchResponse = await index.query({
       vector: queryVector,
-      topK: 1,
+      topK: 3,
       includeMetadata: true,
     });
 
