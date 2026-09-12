@@ -99,52 +99,46 @@ export class NotesService {
     const profileContext = this.profileService.getRelevantContext(query);
     const profile = this.profileService.getProfile();
 
-    let answer = '';
-
-    if (intent !== 'general') {
-      // Instant (< 20ms) high-precision response for portfolio navigation
-      answer = this.aiService.generateLocalFallback(query);
-    } else {
-      // Semantic vector search + NVIDIA LLM for open-ended or custom questions
-      let pineconeMatchesText = '';
-      try {
-        const queryVector = await this.embeddingsService.generateEmbedding(query);
-        const searchResponse = await this.pineconeService.query({
-          vector: queryVector,
-          topK: 3,
-          includeMetadata: true,
-        });
-
-        const matches = searchResponse.matches || [];
-        if (matches.length > 0) {
-          pineconeMatchesText = matches
-            .map(
-              (m, i) =>
-                `${i + 1}. Title: "${m.metadata?.title}"\n   Description: "${
-                  m.metadata?.description
-                }"\n   Relevance: ${((m.score || 0) * 100).toFixed(1)}%`,
-            )
-            .join('\n\n');
-        }
-      } catch (err: any) {
-        this.logger.warn(
-          `Pinecone retrieval skipped/failed (${err.message}). Using rich built-in profile context.`,
-        );
-      }
-
-      const fullContext = [
-        profileContext,
-        pineconeMatchesText ? `PINECONE VECTOR MATCHES:\n${pineconeMatchesText}` : '',
-      ]
-        .filter(Boolean)
-        .join('\n\n');
-
-      answer = await this.aiService.generatePortfolioAnswer(
-        query,
-        fullContext,
-        history,
+    // Every conversation goes through the model. Intent detection only decides
+    // which structured card accompanies the answer; it never replaces the AI.
+    let pineconeMatchesText = '';
+    try {
+      const contextualQuery = history
+        .filter((message) => message.role === 'user')
+        .slice(-2)
+        .map((message) => message.content)
+        .concat(query)
+        .join('\n');
+      const queryVector = await this.embeddingsService.generateEmbedding(contextualQuery);
+      const searchResponse = await this.pineconeService.query({
+        vector: queryVector,
+        topK: 3,
+        includeMetadata: true,
+      });
+      const matches = searchResponse.matches || [];
+      pineconeMatchesText = matches
+        .map(
+          (match, index) =>
+            `${index + 1}. ${match.metadata?.title}: ${match.metadata?.description}`,
+        )
+        .join('\n');
+    } catch (err: any) {
+      this.logger.warn(
+        `Pinecone retrieval skipped/failed (${err.message}). Using built-in profile context.`,
       );
     }
+
+    const fullContext = [
+      profileContext,
+      pineconeMatchesText ? `SEMANTIC MEMORY:\n${pineconeMatchesText}` : '',
+    ]
+      .filter(Boolean)
+      .join('\n\n');
+    const answer = await this.aiService.generatePortfolioAnswer(
+      query,
+      fullContext,
+      history,
+    );
 
     // Determine cardType and attach payload for frontend UI components
     let cardType: 'projects' | 'resume' | 'experience' | 'skills' | 'contact' | 'none' = 'none';
@@ -156,17 +150,6 @@ export class NotesService {
     const lowerQuery = query.toLowerCase();
 
     if (
-      intent === 'experience' ||
-      lowerQuery.includes('alignlabs') ||
-      lowerQuery.includes('codenebula') ||
-      lowerQuery.includes('work at')
-    ) {
-      cardType = 'experience';
-      experiencePayload = this.profileService.getExperience();
-    } else if (intent === 'projects' || lowerQuery.includes('project') || lowerQuery.includes('built')) {
-      cardType = 'projects';
-      relevantProjects = this.profileService.getProjects();
-    } else if (
       intent === 'resume' ||
       lowerQuery.includes('resume') ||
       lowerQuery.includes('cv') ||
@@ -184,6 +167,12 @@ export class NotesService {
         experience: profile.experience,
         skills: profile.skills,
       };
+    } else if (intent === 'projects') {
+      cardType = 'projects';
+      relevantProjects = this.profileService.getProjects();
+    } else if (intent === 'experience') {
+      cardType = 'experience';
+      experiencePayload = this.profileService.getExperience();
     } else if (intent === 'skills' || lowerQuery.includes('skill') || lowerQuery.includes('stack')) {
       cardType = 'skills';
       skillsPayload = this.profileService.getSkills();

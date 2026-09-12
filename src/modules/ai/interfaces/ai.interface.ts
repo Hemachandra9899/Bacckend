@@ -8,4 +8,5 @@ export interface GenerateCompletionOptions {
   model?: string;
   temperature?: number;
   maxTokens?: number;
+  fallbackQuery?: string;
 }

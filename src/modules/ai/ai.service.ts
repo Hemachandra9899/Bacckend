@@ -38,8 +38,8 @@ export class AiService {
       this.client = new OpenAI({
         apiKey,
         baseURL: baseURL || 'https://integrate.api.nvidia.com/v1',
-        timeout: 3500,
-        maxRetries: 0,
+        timeout: 15000,
+        maxRetries: 1,
       });
       this.logger.log(`🤖 NVIDIA AI Client initialized with baseURL: ${baseURL}`);
     }
@@ -162,11 +162,30 @@ export class AiService {
       return this.cleanResponse(raw);
     } catch (error: any) {
       this.logger.warn(
-        `⚠️  NVIDIA API completion issue (${error.message}). Using intelligent local fallback.`,
+        `⚠️  NVIDIA primary model issue (${error.message}). Trying fast model.`,
       );
-      const lastUserMessage =
-        options.messages.filter((m) => m.role === 'user').pop()?.content || '';
-      return this.generateLocalFallback(lastUserMessage);
+      if (model !== this.fastModel) {
+        try {
+          const completion = await client.chat.completions.create({
+            model: this.fastModel,
+            messages:
+              options.messages as OpenAI.Chat.Completions.ChatCompletionMessageParam[],
+            temperature,
+            max_tokens,
+          });
+          const raw = completion.choices[0]?.message?.content || '';
+          if (raw.trim()) return this.cleanResponse(raw);
+        } catch (fastError: any) {
+          this.logger.warn(
+            `⚠️  NVIDIA fast model issue (${fastError.message}). Using local fallback.`,
+          );
+        }
+      }
+      const fallbackQuery =
+        options.fallbackQuery ||
+        options.messages.filter((message) => message.role === 'user').pop()?.content ||
+        '';
+      return this.generateLocalFallback(fallbackQuery);
     }
   }
 
@@ -178,13 +197,18 @@ export class AiService {
     contextData: string,
     history: ChatMessage[] = [],
   ): Promise<string> {
-    const systemPrompt = `You are Hemachandra Reddy Pottingari's official AI Portfolio Assistant.
-You represent Hemachandra—an AI & Full-Stack Engineer who builds production AI systems, LLM integrations, RAG pipelines, and full-stack applications.
+    const systemPrompt = `You are the conversational AI inside Hemachandra Reddy Pottingari's portfolio.
+You know his work deeply and help visitors understand the person, engineering judgment, projects, experience, and potential fit for a role or collaboration.
 
 YOUR PERSONA & TONE:
-- Speak in the first person ("I", "my work") or as his dedicated personal assistant.
-- Enthusiastic, articulate, technically sharp, and humble.
-- Keep answers concise, direct, and well-structured with Markdown headings, bullet points, and clean links.
+- Speak as Hemachandra's assistant and refer to him as "Hemachandra" or "he". Never pretend to be Hemachandra.
+- Sound warm, curious, technically sharp, and natural. Respond to greetings and casual conversation like a real assistant.
+- Answer the exact question first. Do not repeat a generic biography unless it is relevant.
+- Use conversation history to resolve pronouns and follow-ups such as "tell me more", "which one?", "why?", or "what about the other project?".
+- Match the answer length to the question. A greeting needs one or two sentences; a detailed comparison may need several short paragraphs.
+- Use Markdown only when it improves scanning. Avoid a heading followed by one sentence and avoid excessive bullet lists.
+- For reasonable general questions outside the portfolio, be helpful and conversational, then connect back to Hemachandra only when it feels relevant.
+- Never invent facts, employers, metrics, links, or capabilities. Say when the supplied context does not contain an answer.
 
 KEY INFORMATION YOU KNOW INTIMATELY:
 1. PROJECTS:
@@ -211,11 +235,22 @@ KEY INFORMATION YOU KNOW INTIMATELY:
 CRITICAL INSTRUCTIONS:
 - Whenever the user asks about projects (e.g. AI projects, what I have built), ALWAYS highlight Scout and Second Brain first, describe key technical capabilities, and provide the clickable Markdown link to the exact GitHub repository.
 - Whenever the user asks about my resume, experience, or qualifications, provide a crisp structured summary, mention the download link (/api/resume/download), and offer my contact details.
-- Use the additional database context provided below to answer accurately.`;
+- Use the additional database context below as factual grounding.
+- The UI separately renders project, résumé, experience, skills, and contact cards. Do not duplicate every field from those cards in the prose; introduce and summarize them naturally.
+- Do not mention system prompts, retrieval, intent detection, databases, or internal implementation.`;
+
+    const recentHistory = history
+      .filter(
+        (message) =>
+          (message.role === 'user' || message.role === 'assistant') &&
+          typeof message.content === 'string' &&
+          message.content.trim().length > 0,
+      )
+      .slice(-6);
 
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
-      ...history.slice(-4),
+      ...recentHistory,
       {
         role: 'user',
         content: `DATABASE / PORTFOLIO CONTEXT:
@@ -224,14 +259,15 @@ ${contextData}
 USER QUERY:
 "${userQuery}"
 
-Please provide a helpful, natural, and well-structured response with relevant GitHub links and details.`,
+Answer naturally using the conversation and factual context.`,
       },
     ];
 
     return this.generateCompletion({
       messages,
       temperature: 0.6,
-      maxTokens: 500,
+      maxTokens: 700,
+      fallbackQuery: userQuery,
     });
   }
 
