@@ -22,7 +22,7 @@ export class AiService {
       'meta/llama-3.2-11b-vision-instruct';
     this.chatModel =
       this.configService.get<string>('nvidia.chatModel') ||
-      'mistralai/mistral-7b-instruct-v0.3';
+      'nvidia/nemotron-3.5-lightning-30b-a3b';
     this.fastModel =
       this.configService.get<string>('nvidia.fastModel') ||
       'meta/llama-3.2-11b-vision-instruct';

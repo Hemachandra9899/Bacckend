@@ -11,7 +11,7 @@ export default () => ({
       process.env.NVIDIA_BASE_URL || 'https://integrate.api.nvidia.com/v1',
     model: process.env.NVIDIA_LLM_MODEL || 'meta/llama-3.2-11b-vision-instruct',
     chatModel:
-      process.env.NVIDIA_CHAT_MODEL || 'mistralai/mistral-7b-instruct-v0.3',
+      process.env.NVIDIA_CHAT_MODEL || 'nvidia/nemotron-3.5-lightning-30b-a3b',
     fastModel:
       process.env.NVIDIA_FAST_MODEL || 'nvidia/nemotron-3.5-lightning-30b-a3b',
   },
