@@ -99,41 +99,9 @@ export class NotesService {
     const profileContext = this.profileService.getRelevantContext(query);
     const profile = this.profileService.getProfile();
 
-    // Every conversation goes through the model. Intent detection only decides
-    // which structured card accompanies the answer; it never replaces the AI.
-    let pineconeMatchesText = '';
-    try {
-      const contextualQuery = history
-        .filter((message) => message.role === 'user')
-        .slice(-2)
-        .map((message) => message.content)
-        .concat(query)
-        .join('\n');
-      const queryVector = await this.embeddingsService.generateEmbedding(contextualQuery);
-      const searchResponse = await this.pineconeService.query({
-        vector: queryVector,
-        topK: 3,
-        includeMetadata: true,
-      });
-      const matches = searchResponse.matches || [];
-      pineconeMatchesText = matches
-        .map(
-          (match, index) =>
-            `${index + 1}. ${match.metadata?.title}: ${match.metadata?.description}`,
-        )
-        .join('\n');
-    } catch (err: any) {
-      this.logger.warn(
-        `Pinecone retrieval skipped/failed (${err.message}). Using built-in profile context.`,
-      );
-    }
-
-    const fullContext = [
-      profileContext,
-      pineconeMatchesText ? `SEMANTIC MEMORY:\n${pineconeMatchesText}` : '',
-    ]
-      .filter(Boolean)
-      .join('\n\n');
+    // Profile data is already complete and structured. Avoiding embeddings and
+    // a remote vector query keeps every conversational request on the fast path.
+    const fullContext = profileContext;
     const answer = await this.aiService.generatePortfolioAnswer(
       query,
       fullContext,

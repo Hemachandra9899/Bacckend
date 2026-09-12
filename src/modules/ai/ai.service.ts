@@ -13,12 +13,16 @@ export class AiService {
   private readonly logger = new Logger(AiService.name);
   private client: OpenAI | null = null;
   private primaryModel: string;
+  private chatModel: string;
   private fastModel: string;
 
   constructor(private readonly configService: ConfigService) {
     this.primaryModel =
       this.configService.get<string>('nvidia.model') ||
       'meta/llama-3.2-11b-vision-instruct';
+    this.chatModel =
+      this.configService.get<string>('nvidia.chatModel') ||
+      'mistralai/mistral-7b-instruct-v0.3';
     this.fastModel =
       this.configService.get<string>('nvidia.fastModel') ||
       'meta/llama-3.2-11b-vision-instruct';
@@ -264,9 +268,10 @@ Answer naturally using the conversation and factual context.`,
     ];
 
     return this.generateCompletion({
+      model: this.chatModel,
       messages,
-      temperature: 0.6,
-      maxTokens: 700,
+      temperature: 0.55,
+      maxTokens: 420,
       fallbackQuery: userQuery,
     });
   }
